@@ -1,0 +1,41 @@
+name: UrbanBotaniks to Temu
+
+on:
+  workflow_dispatch:
+    inputs:
+      quantity:
+        description: "Quantity for items shown as in stock (confirm actual inventory before import)"
+        required: true
+        default: "100"
+      workers:
+        description: "Concurrent product requests (1–8)"
+        required: true
+        default: "6"
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Scrape the exact category and fill the original template
+        run: |
+          python urbanbotaniks_scraper.py \
+            --template TEMU_POTS_STORAGE-TRUNKS.xlsx \
+            --output urbanbotaniks-temu.xlsx \
+            --quantity "${{ inputs.quantity }}" \
+            --workers "${{ inputs.workers }}"
+      - name: Upload Temu workbook and review report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: urbanbotaniks-temu-results
+          path: |
+            urbanbotaniks-temu.xlsx
+            urbanbotaniks-temu.review.json
+          if-no-files-found: warn
