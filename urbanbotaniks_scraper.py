@@ -131,9 +131,9 @@ def parse_product(url):
     if sale is None:
         raise ValueError("No EUR price at " + url)
     former = first(page, '//*[contains(@class,"c-product-page__product-price-section")]//*[contains(@class,"old-price") or contains(@class,"list-price__value")]/text()')
-    list_price = parse_money(former) or sale
-    if list_price < sale:
-        list_price = sale
+    list_price = parse_money(former)
+    if list_price is not None and list_price <= sale:
+        list_price = None
     available = page.xpath('//*[@itemprop="availability"]/@content')
     in_stock = not available or all("OutOfStock" not in x and "SoldOut" not in x for x in available)
 
@@ -202,11 +202,13 @@ def write_workbook(products, template, output, qty):
         values = {"E": 25104, "G": "Normal product", "L": p["title"], "M": p["sku"], "N": p["sku"],
                   "R": p["brand"] or None, "T": p["description"] or p["title"],
                   "DS": p["shape"] or None, "DU": p["material"] or None,
+                  "EU": "Model", "FG": p["sku"],
                   "FI": p["images"][0], "FT": qty if p["in_stock"] else 0,
                   "FU": p["price"], "FV": p["url"], "FW": p["list_price"],
+                  "FX": "N/A" if p["list_price"] is None else None,
                   "FY": p["weight_g"], "GN": "UB Склад София", "GO": "1 Day",
                   "GP": "I will ship this item myself", "GR": p["origin"] or None,
-                  "IS": p["manufacturer"] or None}
+                  "IR": p["sku"], "IS": p["manufacturer"] or None}
         if p["origin"] and p["origin"] not in EU:
             values["IT"] = "Shteryo Shterev"
         if p["capacity"] is not None:
@@ -265,7 +267,8 @@ def main():
     issues = write_workbook(products, args.template, args.output, args.quantity)
     report = {"category": CATEGORY, "discovered": len(links), "written": len(products), "failed": failed,
               "review": issues, "quantity_assumption": args.quantity,
-              "global_review": "Package dimensions FZ:GB must be measured before Temu import; product measurements are not shipping package measurements."}
+              "global_review": "Not ready for Temu import: package dimensions FZ:GB, packaging fields GD:GF, and indoor/outdoor usage ED require verified seller data. Quantity 100 is an assumption; weight is the product weight supplied by the retailer, not verified packaged weight.",
+              "required_fields_pending_seller_input": ["ED Indoor Outdoor Usage", "FZ Package Length", "GA Package Width", "GB Package Height", "GD Individually packed", "GE Total packaging quantity", "GF Packaging unit"]}
     report_file = Path(args.output).with_suffix(".review.json")
     report_file.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     LOG.info("Saved %s and %s; %d review rows; %d failures", args.output, report_file, len(issues), len(failed))
